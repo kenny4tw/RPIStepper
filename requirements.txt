@@ -1,3 +1,2 @@
-# lgpio is installed as a system package (python3-lgpio via apt)
-# see setup.sh or README.md setup instructions
-rpi-lgpio>=0.6
+adafruit-circuitpython-motorkit
+adafruit-circuitpython-pca9685
