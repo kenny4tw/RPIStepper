@@ -180,6 +180,8 @@
     const logEl = document.getElementById('log');
     const API_BASE = '/stepper/api';
     let lastAvailable = true;
+    let rpmDirty = false;
+    let styleDirty = false;
 
     function appendLog(text) {
       const ts = new Date().toLocaleTimeString();
@@ -206,8 +208,14 @@
           }
         }
         lastAvailable = s.available !== false;
-        document.getElementById('rpm').value = s.speed_rpm;
-        document.getElementById('style').value = s.style;
+        const rpmEl = document.getElementById('rpm');
+        const styleEl = document.getElementById('style');
+        if (!rpmDirty && document.activeElement !== rpmEl) {
+          rpmEl.value = s.speed_rpm;
+        }
+        if (!styleDirty && document.activeElement !== styleEl) {
+          styleEl.value = s.style;
+        }
         const remoteEnabled = Boolean(s.remote_json_enabled);
         document.getElementById('remoteSwitch').checked = remoteEnabled;
         document.getElementById('remoteState').textContent = remoteEnabled ? 'enabled' : 'disabled';
@@ -257,13 +265,18 @@
 
     function applySpeed() {
       const rpm = parseInt(document.getElementById('rpm').value || '60', 10);
+      rpmDirty = false;
       post({ command: 'set_speed', rpm });
     }
 
     function applyStyle() {
       const style = document.getElementById('style').value;
+      styleDirty = false;
       post({ command: 'set_style', style });
     }
+
+    document.getElementById('rpm').addEventListener('input', () => { rpmDirty = true; });
+    document.getElementById('style').addEventListener('change', () => { styleDirty = true; });
 
     document.getElementById('remoteSwitch').addEventListener('change', (e) => {
       setRemoteMode(e.target.checked);

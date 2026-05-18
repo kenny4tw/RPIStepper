@@ -5,6 +5,7 @@ Controls a single stepper motor via Adafruit Motor HAT (I2C) with dual limit swi
 """
 
 import time
+import threading
 import board
 import digitalio
 from adafruit_motorkit import MotorKit
@@ -45,28 +46,35 @@ class StepperController:
         self.style_name = MOTOR_STYLE.upper()
         self.current_position = 0
         self.is_moving = False
+        self.stop_requested = False
+        self._state_lock = threading.Lock()
         self._setup_limit_switches()
 
     def _current_style(self):
-        return _STYLE_MAP.get(self.style_name, stepper.INTERLEAVE)
+        with self._state_lock:
+            return _STYLE_MAP.get(self.style_name, stepper.INTERLEAVE)
 
     def set_speed(self, rpm):
         rpm = int(rpm)
         if rpm <= 0:
             raise ValueError("RPM must be greater than 0")
-        self.speed_rpm = rpm
-        self.motor.rpm = rpm
+        with self._state_lock:
+            self.speed_rpm = rpm
+            self.motor.rpm = rpm
 
     def set_style(self, style):
         name = str(style).upper()
         if name not in _STYLE_MAP:
             raise ValueError("Style must be SINGLE, DOUBLE, INTERLEAVE, or MICROSTEP")
-        self.style_name = name
+        with self._state_lock:
+            self.style_name = name
 
     def _step_delay_seconds(self):
         # Effective step frequency from configured RPM and stepping mode.
-        factor = _STYLE_FACTOR.get(self.style_name, 1)
-        steps_per_second = (MOTOR_STEPS_PER_REV * self.speed_rpm / 60.0) * factor
+        with self._state_lock:
+            factor = _STYLE_FACTOR.get(self.style_name, 1)
+            speed_rpm = self.speed_rpm
+        steps_per_second = (MOTOR_STEPS_PER_REV * speed_rpm / 60.0) * factor
         if steps_per_second <= 0:
             return 0.005
         # Clamp to avoid unrealistically small delays on slower boards.
@@ -87,14 +95,18 @@ class StepperController:
     def move_forward(self, steps):
         """Move stepper forward by specified number of steps."""
         print(f"[MOVE] Moving forward {steps} steps...")
-        style = self._current_style()
-        step_delay = self._step_delay_seconds()
+        self.stop_requested = False
         self.is_moving = True
         try:
             for _ in range(steps):
+                if self.stop_requested:
+                    print("[MOVE] Stop requested")
+                    break
                 if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_2_pressed():
                     print("[LIMIT] Limit switch 2 triggered - stopping motor")
                     break
+                style = self._current_style()
+                step_delay = self._step_delay_seconds()
                 self.motor.onestep(direction=stepper.FORWARD, style=style)
                 self.current_position += 1
                 time.sleep(step_delay)
@@ -106,14 +118,18 @@ class StepperController:
     def move_backward(self, steps):
         """Move stepper backward by specified number of steps."""
         print(f"[MOVE] Moving backward {steps} steps...")
-        style = self._current_style()
-        step_delay = self._step_delay_seconds()
+        self.stop_requested = False
         self.is_moving = True
         try:
             for _ in range(steps):
+                if self.stop_requested:
+                    print("[MOVE] Stop requested")
+                    break
                 if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_1_pressed():
                     print("[LIMIT] Limit switch 1 triggered - stopping motor")
                     break
+                style = self._current_style()
+                step_delay = self._step_delay_seconds()
                 self.motor.onestep(direction=stepper.BACKWARD, style=style)
                 self.current_position -= 1
                 time.sleep(step_delay)
@@ -123,6 +139,7 @@ class StepperController:
         return True
 
     def stop(self):
+        self.stop_requested = True
         self.is_moving = False
         self.release()
         print("[MOVE] Motor stopped")
@@ -130,16 +147,20 @@ class StepperController:
     def home(self, max_steps=2000):
         """Move to home position using limit switch 1 (left/bottom)."""
         print("[HOME] Homing to limit switch 1...")
-        style = self._current_style()
-        step_delay = self._step_delay_seconds()
+        self.stop_requested = False
         steps = 0
         self.is_moving = True
         try:
             while steps < max_steps:
+                if self.stop_requested:
+                    print("[HOME] Stop requested")
+                    break
                 if self.limit_switch_1_pressed():
                     print("[HOME] Home position reached")
                     self.current_position = 0
                     return True
+                style = self._current_style()
+                step_delay = self._step_delay_seconds()
                 self.motor.onestep(direction=stepper.BACKWARD, style=style)
                 self.current_position -= 1
                 time.sleep(step_delay)
@@ -161,13 +182,16 @@ class StepperController:
         return not self.limit2.value  # Active LOW
 
     def get_status(self):
+        with self._state_lock:
+            speed_rpm = self.speed_rpm
+            style_name = self.style_name
         return {
             "position": self.current_position,
             "limit_switch_1": self.limit_switch_1_pressed(),
             "limit_switch_2": self.limit_switch_2_pressed(),
             "moving": self.is_moving,
-            "speed_rpm": self.speed_rpm,
-            "style": self.style_name
+            "speed_rpm": speed_rpm,
+            "style": style_name
         }
 
     def release(self):

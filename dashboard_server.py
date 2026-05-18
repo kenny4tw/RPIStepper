@@ -21,6 +21,8 @@ controller = None
 controller_error = None
 controller_lock = threading.Lock()
 mode_lock = threading.Lock()
+motion_thread = None
+motion_lock = threading.Lock()
 last_command_id = None
 remote_json_enabled = False
 
@@ -73,7 +75,7 @@ def remote_stepper_request(path, payload=None):
 
 
 def execute_command(payload, source="ui"):
-    global remote_json_enabled
+    global remote_json_enabled, motion_thread
     command = str(payload.get("command", "")).strip().lower()
     if not command:
         return {"ok": False, "error": "Missing command"}, 400
@@ -103,13 +105,25 @@ def execute_command(payload, source="ui"):
         try:
             if command == "move_forward":
                 steps = int(payload.get("steps", 100))
-                ctrl.move_forward(steps)
+                with motion_lock:
+                    if motion_thread is not None and motion_thread.is_alive():
+                        return {"ok": False, "error": "Motor is busy"}, 409
+                    motion_thread = threading.Thread(target=ctrl.move_forward, args=(steps,), daemon=True)
+                    motion_thread.start()
             elif command == "move_backward":
                 steps = int(payload.get("steps", 100))
-                ctrl.move_backward(steps)
+                with motion_lock:
+                    if motion_thread is not None and motion_thread.is_alive():
+                        return {"ok": False, "error": "Motor is busy"}, 409
+                    motion_thread = threading.Thread(target=ctrl.move_backward, args=(steps,), daemon=True)
+                    motion_thread.start()
             elif command == "home":
                 max_steps = int(payload.get("max_steps", 2000))
-                ctrl.home(max_steps=max_steps)
+                with motion_lock:
+                    if motion_thread is not None and motion_thread.is_alive():
+                        return {"ok": False, "error": "Motor is busy"}, 409
+                    motion_thread = threading.Thread(target=ctrl.home, kwargs={"max_steps": max_steps}, daemon=True)
+                    motion_thread.start()
             elif command == "stop":
                 ctrl.stop()
             elif command == "set_speed":
