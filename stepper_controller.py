@@ -40,10 +40,10 @@ class StepperController:
 
     def _setup_limit_switches(self):
         if ENABLE_LIMIT_SWITCHES:
-            self.limit1 = digitalio.DigitalInOut(getattr(board, f"GPIO{LIMIT_SWITCH_1_PIN}"))
+            self.limit1 = digitalio.DigitalInOut(getattr(board, f"D{LIMIT_SWITCH_1_PIN}"))
             self.limit1.direction = digitalio.Direction.INPUT
             self.limit1.pull = digitalio.Pull.UP
-            self.limit2 = digitalio.DigitalInOut(getattr(board, f"GPIO{LIMIT_SWITCH_2_PIN}"))
+            self.limit2 = digitalio.DigitalInOut(getattr(board, f"D{LIMIT_SWITCH_2_PIN}"))
             self.limit2.direction = digitalio.Direction.INPUT
             self.limit2.pull = digitalio.Pull.UP
         else:
