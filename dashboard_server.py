@@ -14,11 +14,28 @@ RADAR_DASHBOARD_URL = os.getenv("RADAR_DASHBOARD_URL", "http://127.0.0.1:5060")
 OPTA_DASHBOARD_URL = os.getenv("OPTA_DASHBOARD_URL", "http://127.0.0.1:5070")
 
 app = Flask(__name__)
-controller = StepperController()
+controller = None
+controller_error = None
 controller_lock = threading.Lock()
 mode_lock = threading.Lock()
 last_command_id = None
 remote_json_enabled = False
+
+
+def get_controller():
+    global controller, controller_error
+    if controller is not None:
+        return controller, None
+    if controller_error is not None:
+        return None, controller_error
+
+    try:
+        controller = StepperController()
+        return controller, None
+    except Exception as exc:
+        controller_error = str(exc)
+        print(f"[STEPPER] Hardware unavailable: {controller_error}")
+        return None, controller_error
 
 
 def execute_command(payload, source="ui"):
@@ -36,24 +53,31 @@ def execute_command(payload, source="ui"):
                 }, 403
 
     with controller_lock:
+        ctrl, ctrl_error = get_controller()
+        if ctrl is None:
+            return {
+                "ok": False,
+                "error": f"Stepper hardware unavailable: {ctrl_error}",
+            }, 503
+
         try:
             if command == "move_forward":
                 steps = int(payload.get("steps", 100))
-                controller.move_forward(steps)
+                ctrl.move_forward(steps)
             elif command == "move_backward":
                 steps = int(payload.get("steps", 100))
-                controller.move_backward(steps)
+                ctrl.move_backward(steps)
             elif command == "home":
                 max_steps = int(payload.get("max_steps", 2000))
-                controller.home(max_steps=max_steps)
+                ctrl.home(max_steps=max_steps)
             elif command == "stop":
-                controller.stop()
+                ctrl.stop()
             elif command == "set_speed":
                 rpm = int(payload.get("rpm", 60))
-                controller.set_speed(rpm)
+                ctrl.set_speed(rpm)
             elif command == "set_style":
                 style = str(payload.get("style", "INTERLEAVE"))
-                controller.set_style(style)
+                ctrl.set_style(style)
             else:
                 return {"ok": False, "error": f"Unknown command: {command}"}, 400
         except Exception as exc:
@@ -63,7 +87,7 @@ def execute_command(payload, source="ui"):
             "ok": True,
             "command": command,
             "source": source,
-            "status": controller.get_status(),
+            "status": ctrl.get_status(),
         }, 200
 
 
@@ -114,7 +138,21 @@ def api_status():
     with mode_lock:
         remote_enabled = remote_json_enabled
     with controller_lock:
-        status = controller.get_status()
+        ctrl, ctrl_error = get_controller()
+        if ctrl is None:
+            status = {
+                "available": False,
+                "error": ctrl_error,
+                "position": 0,
+                "limit_switch_1": False,
+                "limit_switch_2": False,
+                "moving": False,
+                "speed_rpm": 0,
+                "style": "INTERLEAVE",
+            }
+        else:
+            status = ctrl.get_status()
+            status["available"] = True
     status["remote_json_enabled"] = remote_enabled
     return jsonify(status)
 

@@ -192,7 +192,12 @@
         document.getElementById('position').textContent = s.position;
         document.getElementById('limit1').textContent = String(s.limit_switch_1);
         document.getElementById('limit2').textContent = String(s.limit_switch_2);
-        document.getElementById('moving').textContent = s.moving ? 'moving' : 'idle';
+        if (s.available === false) {
+          document.getElementById('moving').textContent = 'unavailable';
+          appendLog('Stepper unavailable on this host: ' + (s.error || 'unknown error'));
+        } else {
+          document.getElementById('moving').textContent = s.moving ? 'moving' : 'idle';
+        }
         document.getElementById('rpm').value = s.speed_rpm;
         document.getElementById('style').value = s.style;
         const remoteEnabled = Boolean(s.remote_json_enabled);
