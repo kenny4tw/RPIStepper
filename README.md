@@ -46,6 +46,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Note: On Raspberry Pi OS with Python 3.13, this project uses `rpi-lgpio` as a drop-in replacement for `RPi.GPIO`.
+
 ### 5. GPIO Configuration
 
 Edit `config.py` to match your HAT pinout:
@@ -119,6 +121,18 @@ python3 example.py continuous # Continuous operation
 ## Configuration
 
 See `config.py` for GPIO pin mappings and stepper motor parameters.
+
+## Troubleshooting
+
+If dependency install fails for GPIO libraries, ensure your Pi is up to date and rerun setup:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-dev python3-venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
 ## License
 
