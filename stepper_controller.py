@@ -1,4 +1,3 @@
-def main():
 """
 RPIStepper - Adafruit Motor HAT (PCA9685/TB6612) Stepper Controller for Raspberry Pi
 
