@@ -119,6 +119,11 @@
 <body>
   <div class="wrap">
     <h1>RPIStepper Dashboard</h1>
+    <div class="row" style="margin-bottom: 12px;">
+      <a href="/" style="text-decoration:none;color:#0a7d5b;font-weight:600;">Hub</a>
+      <a href="/radarsensor" style="text-decoration:none;color:#0a7d5b;font-weight:600;">RadarSensor</a>
+      <a href="/opta" style="text-decoration:none;color:#0a7d5b;font-weight:600;">Opta</a>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -161,12 +166,19 @@
         <button onclick="applyStyle()">Set Style</button>
       </div>
 
+      <div class="row" style="align-items:center; margin-top: 14px;">
+        <label for="remoteSwitch" style="font-size:14px;font-weight:600;">Remote JSON Control (LabVIEW/cRIO)</label>
+        <input id="remoteSwitch" type="checkbox" style="min-width:auto; width:18px; height:18px;">
+        <span id="remoteState" class="label" style="font-size:12px;">disabled</span>
+      </div>
+
       <div id="log" class="log">Dashboard ready.</div>
     </div>
   </div>
 
   <script>
     const logEl = document.getElementById('log');
+    const API_BASE = '/stepper/api';
 
     function appendLog(text) {
       const ts = new Date().toLocaleTimeString();
@@ -175,7 +187,7 @@
 
     async function fetchStatus() {
       try {
-        const res = await fetch('/api/status');
+        const res = await fetch(`${API_BASE}/status`);
         const s = await res.json();
         document.getElementById('position').textContent = s.position;
         document.getElementById('limit1').textContent = String(s.limit_switch_1);
@@ -183,13 +195,16 @@
         document.getElementById('moving').textContent = s.moving ? 'moving' : 'idle';
         document.getElementById('rpm').value = s.speed_rpm;
         document.getElementById('style').value = s.style;
+        const remoteEnabled = Boolean(s.remote_json_enabled);
+        document.getElementById('remoteSwitch').checked = remoteEnabled;
+        document.getElementById('remoteState').textContent = remoteEnabled ? 'enabled' : 'disabled';
       } catch (err) {
         appendLog('Status fetch failed: ' + err.message);
       }
     }
 
     async function post(payload) {
-      const res = await fetch('/api/command', {
+      const res = await fetch(`${API_BASE}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -201,6 +216,21 @@
       }
       appendLog('Executed: ' + payload.command);
       fetchStatus();
+    }
+
+    async function setRemoteMode(enabled) {
+      const res = await fetch(`${API_BASE}/remote-mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        appendLog('Failed to set remote mode');
+        return;
+      }
+      document.getElementById('remoteState').textContent = data.remote_json_enabled ? 'enabled' : 'disabled';
+      appendLog('Remote JSON control ' + (data.remote_json_enabled ? 'enabled' : 'disabled'));
     }
 
     function sendCommand(command) {
@@ -221,6 +251,10 @@
       const style = document.getElementById('style').value;
       post({ command: 'set_style', style });
     }
+
+    document.getElementById('remoteSwitch').addEventListener('change', (e) => {
+      setRemoteMode(e.target.checked);
+    });
 
     fetchStatus();
     setInterval(fetchStatus, 1000);

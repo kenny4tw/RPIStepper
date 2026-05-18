@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Hub</title>
+  <style>
+    body { margin: 0; font-family: "Segoe UI", sans-serif; background: #eef4f7; color: #17303f; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .card { background: #fff; border: 1px solid #d7e1e7; border-radius: 12px; padding: 16px; }
+    h1 { margin: 0 0 12px; }
+    h2 { margin: 0 0 6px; font-size: 18px; }
+    p { margin: 0 0 12px; color: #58717d; }
+    a { display: inline-block; background: #0b7b5b; color: #fff; text-decoration: none; padding: 10px 12px; border-radius: 9px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Local Dashboard Hub</h1>
+    <p>Single web server for Stepper, RadarSensor, and Opta dashboards.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>RPIStepper</h2>
+        <p>Motor HAT control with limit switches, JSON mode, and manual buttons.</p>
+        <a href="/stepper">Open /stepper</a>
+      </div>
+      <div class="card">
+        <h2>RadarSensor</h2>
+        <p>Embedded from configured upstream URL.</p>
+        <a href="/radarsensor">Open /radarsensor</a>
+      </div>
+      <div class="card">
+        <h2>Arduino Opta</h2>
+        <p>Embedded from configured upstream URL.</p>
+        <a href="/opta">Open /opta</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

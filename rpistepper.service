@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/RPIStepper
+Environment=RADAR_DASHBOARD_URL=http://127.0.0.1:5060
+Environment=OPTA_DASHBOARD_URL=http://127.0.0.1:5070
 ExecStart=/usr/bin/python3 /home/pi/RPIStepper/dashboard_server.py
 Restart=on-failure
 RestartSec=10

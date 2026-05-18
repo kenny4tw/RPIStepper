@@ -15,7 +15,7 @@ A Raspberry Pi 3 B+ stepper motor controller for Adafruit Motor HAT (PID 2348) w
 - Single stepper motor control on Motor HAT M1/M2 or M3/M4
 - Dual limit switch monitoring
 - JSON command-file control (`command.json`)
-- Local web dashboard + API (`http://<host>:5055`)
+- Unified web dashboard hub with named paths (`/stepper`, `/radarsensor`, `/opta`)
 - Real-time status display (position, limits, speed, style)
 
 ## Setup
@@ -71,6 +71,21 @@ Then open:
 http://localhost:5055
 ```
 
+Dashboard paths:
+
+```text
+http://<host>:5055/stepper
+http://<host>:5055/radarsensor
+http://<host>:5055/opta
+```
+
+Set upstream URLs for embedded RadarSensor/Opta dashboards with environment variables:
+
+```bash
+export RADAR_DASHBOARD_URL="http://127.0.0.1:5060"
+export OPTA_DASHBOARD_URL="http://127.0.0.1:5070"
+```
+
 ### 7. (Optional) Run on Boot
 
 See [Setup as Systemd Service](#setup-as-systemd-service) below.
@@ -110,7 +125,13 @@ python3 dashboard_server.py
 Open dashboard in browser:
 
 ```text
-http://localhost:5055
+http://localhost:5055/stepper
+```
+
+Hub page (all dashboards):
+
+```text
+http://localhost:5055/
 ```
 
 ### JSON File Control
@@ -164,16 +185,29 @@ Example commands:
 Status:
 
 ```bash
-curl http://localhost:5055/api/status
+curl http://localhost:5055/stepper/api/status
 ```
 
 Command:
 
 ```bash
-curl -X POST http://localhost:5055/api/command \
+curl -X POST http://localhost:5055/stepper/api/command \
 	-H "Content-Type: application/json" \
 	-d '{"command":"move_forward","steps":200}'
 ```
+
+### Remote JSON Control (LabVIEW cRIO)
+
+1. In `/stepper` dashboard, enable switch: **Remote JSON Control (LabVIEW/cRIO)**
+2. Send commands to remote endpoint:
+
+```bash
+curl -X POST http://localhost:5055/stepper/api/remote-command \
+	-H "Content-Type: application/json" \
+	-d '{"command":"move_forward","steps":200}'
+```
+
+If the switch is off, remote commands are rejected with HTTP 403.
 
 ### Python Controller Usage
 

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; font-family: "Segoe UI", sans-serif; }
+    .top { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0d2733; color: #fff; }
+    a { color: #b8f3df; text-decoration: none; font-weight: 600; }
+    iframe { border: none; width: 100%; height: calc(100% - 48px); }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <a href="/">Hub</a>
+    <span>{{ title }}</span>
+    <span style="opacity:0.75; font-size: 13px;">Source: {{ upstream_url }}</span>
+  </div>
+  <iframe src="{{ upstream_url }}" title="{{ title }}"></iframe>
+</body>
+</html>
