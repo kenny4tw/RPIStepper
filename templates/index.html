@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RPIStepper Dashboard</title>
+  <style>
+    :root {
+      --bg: #f4f7f9;
+      --card: #ffffff;
+      --ink: #10212b;
+      --muted: #5a6d79;
+      --accent: #0a7d5b;
+      --warn: #bf2f2f;
+      --edge: #d9e2e8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans", sans-serif;
+      background: radial-gradient(circle at top right, #d8eef0, var(--bg) 42%);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      letter-spacing: 0.2px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--edge);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 26px rgba(12, 38, 54, 0.07);
+    }
+
+    .label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .value {
+      font-size: 28px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .controls {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      background: var(--accent);
+      transition: transform 0.08s ease, opacity 0.2s ease;
+    }
+
+    button:hover { opacity: 0.92; }
+    button:active { transform: translateY(1px); }
+
+    .danger { background: var(--warn); }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    input, select {
+      padding: 10px;
+      border-radius: 9px;
+      border: 1px solid var(--edge);
+      min-width: 130px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .log {
+      margin-top: 14px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      background: #09151d;
+      color: #c8e7db;
+      border-radius: 9px;
+      padding: 10px;
+      min-height: 80px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>RPIStepper Dashboard</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="label">Position</div>
+        <div id="position" class="value">0</div>
+      </div>
+      <div class="card">
+        <div class="label">Limit Switch 1</div>
+        <div id="limit1" class="value">false</div>
+      </div>
+      <div class="card">
+        <div class="label">Limit Switch 2</div>
+        <div id="limit2" class="value">false</div>
+      </div>
+      <div class="card">
+        <div class="label">Motor</div>
+        <div id="moving" class="value">idle</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="label">Control</div>
+      <div class="controls">
+        <button onclick="sendCommand('move_forward')">Forward</button>
+        <button onclick="sendCommand('move_backward')">Backward</button>
+        <button onclick="sendCommand('home')">Home</button>
+        <button class="danger" onclick="sendCommand('stop')">Stop</button>
+      </div>
+
+      <div class="row">
+        <input id="steps" type="number" min="1" value="200" placeholder="steps">
+        <input id="rpm" type="number" min="1" value="60" placeholder="rpm">
+        <select id="style">
+          <option>SINGLE</option>
+          <option>DOUBLE</option>
+          <option selected>INTERLEAVE</option>
+          <option>MICROSTEP</option>
+        </select>
+        <button onclick="applySpeed()">Set Speed</button>
+        <button onclick="applyStyle()">Set Style</button>
+      </div>
+
+      <div id="log" class="log">Dashboard ready.</div>
+    </div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+
+    function appendLog(text) {
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent = `[${ts}] ${text}\n` + logEl.textContent;
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const s = await res.json();
+        document.getElementById('position').textContent = s.position;
+        document.getElementById('limit1').textContent = String(s.limit_switch_1);
+        document.getElementById('limit2').textContent = String(s.limit_switch_2);
+        document.getElementById('moving').textContent = s.moving ? 'moving' : 'idle';
+        document.getElementById('rpm').value = s.speed_rpm;
+        document.getElementById('style').value = s.style;
+      } catch (err) {
+        appendLog('Status fetch failed: ' + err.message);
+      }
+    }
+
+    async function post(payload) {
+      const res = await fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        appendLog('Error: ' + (data.error || 'unknown'));
+        return;
+      }
+      appendLog('Executed: ' + payload.command);
+      fetchStatus();
+    }
+
+    function sendCommand(command) {
+      const steps = parseInt(document.getElementById('steps').value || '200', 10);
+      if (command === 'move_forward' || command === 'move_backward') {
+        post({ command, steps });
+        return;
+      }
+      post({ command });
+    }
+
+    function applySpeed() {
+      const rpm = parseInt(document.getElementById('rpm').value || '60', 10);
+      post({ command: 'set_speed', rpm });
+    }
+
+    function applyStyle() {
+      const style = document.getElementById('style').value;
+      post({ command: 'set_style', style });
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 1000);
+  </script>
+</body>
+</html>

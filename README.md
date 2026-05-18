@@ -1,6 +1,6 @@
 # RPIStepper
 
-A Raspberry Pi 3 B+ stepper motor controller with dual limit switch support.
+A Raspberry Pi 3 B+ stepper motor controller for Adafruit Motor HAT (PID 2348) with dual limit switch support, JSON-file control, and a local dashboard.
 
 ## Hardware Requirements
 
@@ -12,10 +12,11 @@ A Raspberry Pi 3 B+ stepper motor controller with dual limit switch support.
 
 ## Features
 
-- Single stepper motor control (forward/backward/stop)
+- Single stepper motor control on Motor HAT M1/M2 or M3/M4
 - Dual limit switch monitoring
-- GPIO-based control and sensing
-- Real-time status display
+- JSON command-file control (`command.json`)
+- Local web dashboard + API (`http://<host>:5055`)
+- Real-time status display (position, limits, speed, style)
 
 ## Setup
 
@@ -61,7 +62,13 @@ Edit `config.py` to match your HAT pinout:
 ### 6. Run the Program
 
 ```bash
-python3 stepper_controller.py
+python3 dashboard_server.py
+```
+
+Then open:
+
+```text
+http://localhost:5055
 ```
 
 ### 7. (Optional) Run on Boot
@@ -79,7 +86,7 @@ sudo nano /etc/systemd/system/rpistepper.service
 
 Update these lines to match your venv path:
 ```ini
-ExecStart=/home/pi/RPIStepper/venv/bin/python3 /home/pi/RPIStepper/stepper_controller.py
+ExecStart=/home/pi/RPIStepper/venv/bin/python3 /home/pi/RPIStepper/dashboard_server.py
 Environment="PATH=/home/pi/RPIStepper/venv/bin"
 ```
 
@@ -91,6 +98,84 @@ sudo systemctl start rpistepper.service
 ```
 
 ## Usage
+
+### Dashboard Control
+
+Run server:
+
+```bash
+python3 dashboard_server.py
+```
+
+Open dashboard in browser:
+
+```text
+http://localhost:5055
+```
+
+### JSON File Control
+
+The server watches `command.json` continuously. Write a new command with a new `id` value each time.
+
+Example commands:
+
+```json
+{
+	"id": 101,
+	"command": "move_forward",
+	"steps": 400
+}
+```
+
+```json
+{
+	"id": 102,
+	"command": "move_backward",
+	"steps": 200
+}
+```
+
+```json
+{
+	"id": 103,
+	"command": "set_speed",
+	"rpm": 80
+}
+```
+
+```json
+{
+	"id": 104,
+	"command": "set_style",
+	"style": "MICROSTEP"
+}
+```
+
+```json
+{
+	"id": 105,
+	"command": "home",
+	"max_steps": 3000
+}
+```
+
+### API Control
+
+Status:
+
+```bash
+curl http://localhost:5055/api/status
+```
+
+Command:
+
+```bash
+curl -X POST http://localhost:5055/api/command \
+	-H "Content-Type: application/json" \
+	-d '{"command":"move_forward","steps":200}'
+```
+
+### Python Controller Usage
 
 Make sure your virtual environment is activated:
 
@@ -125,6 +210,10 @@ python3 example.py continuous # Continuous operation
 ## Configuration
 
 See `config.py` for GPIO pin mappings and stepper motor parameters.
+
+Important for Adafruit Motor HAT 2348:
+- `MOTOR_PORT = 1` uses M1+M2
+- `MOTOR_PORT = 2` uses M3+M4
 
 ## Troubleshooting
 

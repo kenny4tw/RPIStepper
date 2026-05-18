@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/RPIStepper
-ExecStart=/usr/bin/python3 /home/pi/RPIStepper/stepper_controller.py
+ExecStart=/usr/bin/python3 /home/pi/RPIStepper/dashboard_server.py
 Restart=on-failure
 RestartSec=10
 

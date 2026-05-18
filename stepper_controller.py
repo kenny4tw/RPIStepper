@@ -33,10 +33,28 @@ class StepperController:
     def __init__(self):
         self.kit = MotorKit()
         self.motor = self.kit.stepper1 if MOTOR_PORT == 1 else self.kit.stepper2
-        self.motor.rpm = MOTOR_SPEED_RPM
+        self.speed_rpm = MOTOR_SPEED_RPM
+        self.motor.rpm = self.speed_rpm
+        self.style_name = MOTOR_STYLE.upper()
         self.current_position = 0
         self.is_moving = False
         self._setup_limit_switches()
+
+    def _current_style(self):
+        return _STYLE_MAP.get(self.style_name, stepper.INTERLEAVE)
+
+    def set_speed(self, rpm):
+        rpm = int(rpm)
+        if rpm <= 0:
+            raise ValueError("RPM must be greater than 0")
+        self.speed_rpm = rpm
+        self.motor.rpm = rpm
+
+    def set_style(self, style):
+        name = str(style).upper()
+        if name not in _STYLE_MAP:
+            raise ValueError("Style must be SINGLE, DOUBLE, INTERLEAVE, or MICROSTEP")
+        self.style_name = name
 
     def _setup_limit_switches(self):
         if ENABLE_LIMIT_SWITCHES:
@@ -53,52 +71,64 @@ class StepperController:
     def move_forward(self, steps):
         """Move stepper forward by specified number of steps."""
         print(f"[MOVE] Moving forward {steps} steps...")
-        style = _STYLE_MAP.get(MOTOR_STYLE.upper(), stepper.INTERLEAVE)
-        for i in range(steps):
-            if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_2_pressed():
-                print("[LIMIT] Limit switch 2 triggered - stopping motor")
-                break
-            self.motor.onestep(direction=stepper.FORWARD, style=style)
-            self.current_position += 1
-            time.sleep(0.005)
-        self.release()
+        style = self._current_style()
+        self.is_moving = True
+        try:
+            for _ in range(steps):
+                if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_2_pressed():
+                    print("[LIMIT] Limit switch 2 triggered - stopping motor")
+                    break
+                self.motor.onestep(direction=stepper.FORWARD, style=style)
+                self.current_position += 1
+                time.sleep(0.005)
+        finally:
+            self.is_moving = False
+            self.release()
         return True
 
     def move_backward(self, steps):
         """Move stepper backward by specified number of steps."""
         print(f"[MOVE] Moving backward {steps} steps...")
-        style = _STYLE_MAP.get(MOTOR_STYLE.upper(), stepper.INTERLEAVE)
-        for i in range(steps):
-            if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_1_pressed():
-                print("[LIMIT] Limit switch 1 triggered - stopping motor")
-                break
-            self.motor.onestep(direction=stepper.BACKWARD, style=style)
-            self.current_position -= 1
-            time.sleep(0.005)
-        self.release()
+        style = self._current_style()
+        self.is_moving = True
+        try:
+            for _ in range(steps):
+                if ENABLE_LIMIT_SWITCHES and AUTO_STOP_AT_LIMIT and self.limit_switch_1_pressed():
+                    print("[LIMIT] Limit switch 1 triggered - stopping motor")
+                    break
+                self.motor.onestep(direction=stepper.BACKWARD, style=style)
+                self.current_position -= 1
+                time.sleep(0.005)
+        finally:
+            self.is_moving = False
+            self.release()
         return True
 
     def stop(self):
+        self.is_moving = False
         self.release()
         print("[MOVE] Motor stopped")
 
     def home(self, max_steps=2000):
         """Move to home position using limit switch 1 (left/bottom)."""
         print("[HOME] Homing to limit switch 1...")
-        style = _STYLE_MAP.get(MOTOR_STYLE.upper(), stepper.INTERLEAVE)
+        style = self._current_style()
         steps = 0
-        while steps < max_steps:
-            if self.limit_switch_1_pressed():
-                print("[HOME] Home position reached")
-                self.current_position = 0
-                self.release()
-                return True
-            self.motor.onestep(direction=stepper.BACKWARD, style=style)
-            self.current_position -= 1
-            time.sleep(0.005)
-            steps += 1
+        self.is_moving = True
+        try:
+            while steps < max_steps:
+                if self.limit_switch_1_pressed():
+                    print("[HOME] Home position reached")
+                    self.current_position = 0
+                    return True
+                self.motor.onestep(direction=stepper.BACKWARD, style=style)
+                self.current_position -= 1
+                time.sleep(0.005)
+                steps += 1
+        finally:
+            self.is_moving = False
+            self.release()
         print("[HOME] Home position search failed - limit not found")
-        self.release()
         return False
 
     def limit_switch_1_pressed(self):
@@ -116,7 +146,9 @@ class StepperController:
             "position": self.current_position,
             "limit_switch_1": self.limit_switch_1_pressed(),
             "limit_switch_2": self.limit_switch_2_pressed(),
-            "moving": self.is_moving
+            "moving": self.is_moving,
+            "speed_rpm": self.speed_rpm,
+            "style": self.style_name
         }
 
     def release(self):
