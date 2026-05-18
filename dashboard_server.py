@@ -58,7 +58,7 @@ def remote_stepper_request(path, payload=None):
 
     req = urllib.request.Request(url=url, data=body, headers=headers, method="POST" if body else "GET")
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             data = resp.read().decode("utf-8")
             return json.loads(data), resp.status, None
     except urllib.error.HTTPError as exc:
@@ -200,24 +200,23 @@ def api_status():
             result["remote_json_enabled"] = remote_enabled
             return jsonify(result), code
 
-    with controller_lock:
-        ctrl, ctrl_error = get_controller()
-        if ctrl is None:
-            status = {
-                "available": False,
-                "error": ctrl_error,
-                "position": 0,
-                "limit_switch_1": False,
-                "limit_switch_2": False,
-                "moving": False,
-                "speed_rpm": 0,
-                "style": "INTERLEAVE",
-                "backend": "local",
-            }
-        else:
-            status = ctrl.get_status()
-            status["available"] = True
-            status["backend"] = "local"
+    ctrl, ctrl_error = get_controller()
+    if ctrl is None:
+        status = {
+            "available": False,
+            "error": ctrl_error,
+            "position": 0,
+            "limit_switch_1": False,
+            "limit_switch_2": False,
+            "moving": False,
+            "speed_rpm": 0,
+            "style": "INTERLEAVE",
+            "backend": "local",
+        }
+    else:
+        status = ctrl.get_status()
+        status["available"] = True
+        status["backend"] = "local"
     status["remote_json_enabled"] = remote_enabled
     return jsonify(status)
 
@@ -281,4 +280,4 @@ if __name__ == "__main__":
     ensure_default_command_file()
     watcher = threading.Thread(target=watch_command_file, daemon=True)
     watcher.start()
-    app.run(host="0.0.0.0", port=5055, debug=False)
+    app.run(host="0.0.0.0", port=5055, debug=False, threaded=True)
