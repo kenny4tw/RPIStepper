@@ -20,15 +20,20 @@ fi
 echo "✓ Python 3 found: $(python3 --version)"
 echo ""
 
-# Create virtual environment
+# Install system-level GPIO library (cannot be built via pip without swig)
+echo "📡 Installing system GPIO library..."
+sudo apt-get install -y python3-lgpio
+echo "   ✓ python3-lgpio installed"
+echo ""
+
+# Create virtual environment with access to system site-packages
 echo "📦 Creating virtual environment..."
 if [ -d "venv" ]; then
-    echo "   Virtual environment already exists, skipping..."
-else
-    python3 -m venv venv
-    echo "   ✓ Virtual environment created"
+    echo "   Removing old venv to ensure --system-site-packages is set..."
+    rm -rf venv
 fi
-
+python3 -m venv --system-site-packages venv
+echo "   ✓ Virtual environment created (with system site-packages)"
 echo ""
 
 # Activate virtual environment
@@ -43,7 +48,7 @@ pip install --upgrade pip
 echo "   ✓ pip upgraded"
 echo ""
 
-# Install requirements
+# Install remaining requirements (rpi-lgpio only, lgpio comes from system)
 echo "📚 Installing Python dependencies..."
 pip install -r requirements.txt
 echo "   ✓ Dependencies installed"

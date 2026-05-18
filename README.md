@@ -23,8 +23,10 @@ A Raspberry Pi 3 B+ stepper motor controller with dual limit switch support.
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3-pip python3-venv
+sudo apt-get install python3-pip python3-venv python3-lgpio
 ```
+
+`python3-lgpio` must be installed via apt — it requires native build tools (`swig`) that are not available in a plain pip environment.
 
 ### 2. Clone Repository
 
@@ -35,8 +37,10 @@ cd RPIStepper
 
 ### 3. Create Virtual Environment
 
+Create the venv with `--system-site-packages` so it can access `lgpio` installed by apt:
+
 ```bash
-python3 -m venv venv
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 ```
 
@@ -46,7 +50,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Note: On Raspberry Pi OS with Python 3.13, this project uses `rpi-lgpio` as a drop-in replacement for `RPi.GPIO`.
+Note: Uses `rpi-lgpio` as a drop-in replacement for `RPi.GPIO`, compatible with Python 3.13. The underlying `lgpio` library is provided by the system package installed in step 1.
 
 ### 5. GPIO Configuration
 
@@ -124,11 +128,16 @@ See `config.py` for GPIO pin mappings and stepper motor parameters.
 
 ## Troubleshooting
 
-If dependency install fails for GPIO libraries, ensure your Pi is up to date and rerun setup:
+If dependency install fails for GPIO libraries:
 
 ```bash
+# Install the system GPIO library first (required)
 sudo apt-get update
-sudo apt-get install -y python3-dev python3-venv
+sudo apt-get install -y python3-lgpio
+
+# Recreate venv with system site-packages access
+rm -rf venv
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
