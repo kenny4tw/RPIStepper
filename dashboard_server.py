@@ -32,6 +32,14 @@ def get_controller():
     if controller_error is not None:
         return None, controller_error
 
+    try:
+        controller = StepperController()
+        return controller, None
+    except Exception as exc:
+        controller_error = str(exc)
+        print(f"[STEPPER] Hardware unavailable: {controller_error}")
+        return None, controller_error
+
 
 def has_remote_stepper():
     return bool(STEPPER_REMOTE_URL)
@@ -63,14 +71,6 @@ def remote_stepper_request(path, payload=None):
     except Exception as exc:
         return None, 503, str(exc)
 
-    try:
-        controller = StepperController()
-        return controller, None
-    except Exception as exc:
-        controller_error = str(exc)
-        print(f"[STEPPER] Hardware unavailable: {controller_error}")
-        return None, controller_error
-
 
 def execute_command(payload, source="ui"):
     global remote_json_enabled
@@ -78,7 +78,7 @@ def execute_command(payload, source="ui"):
     if not command:
         return {"ok": False, "error": "Missing command"}, 400
 
-    if source in {"json", "remote"}:
+    if source == "remote":
         with mode_lock:
             if not remote_json_enabled:
                 return {
