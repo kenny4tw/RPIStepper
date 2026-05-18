@@ -1,7 +1,3 @@
-def example_basic_movement():
-def example_limit_switches():
-def example_home_position():
-def example_continuous_operation():
 """
 Example usage of the Adafruit Motor HAT RPIStepper controller.
 """
