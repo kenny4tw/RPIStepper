@@ -12,6 +12,11 @@ MOTOR_STEPS_PER_REV = 200  # Standard NEMA 17: 1.8° per step = 200 steps/rev
 MOTOR_STYLE = 'INTERLEAVE' # 'SINGLE', 'DOUBLE', 'INTERLEAVE', or 'MICROSTEP'
 MOTOR_SPEED_RPM = 60       # Target speed in RPM
 
+# Motion smoothing
+ACCEL_RAMP_ENABLED = True   # Apply linear acceleration/deceleration ramp
+ACCEL_RAMP_STEPS = 40       # Ramp length in full motor steps (not microsteps)
+ACCEL_START_FACTOR = 2.5    # Start/end delay multiplier vs cruise speed
+
 # Control Modes
 ENABLE_LIMIT_SWITCHES = True
 AUTO_STOP_AT_LIMIT = True  # Stop motor when limit switch is pressed

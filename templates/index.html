@@ -182,6 +182,7 @@
     let lastAvailable = true;
     let rpmDirty = false;
     let styleDirty = false;
+    let userEditingUntil = 0;
 
     function appendLog(text) {
       const ts = new Date().toLocaleTimeString();
@@ -208,12 +209,13 @@
           }
         }
         lastAvailable = s.available !== false;
+        const inEditCooldown = Date.now() < userEditingUntil;
         const rpmEl = document.getElementById('rpm');
         const styleEl = document.getElementById('style');
-        if (!rpmDirty && document.activeElement !== rpmEl) {
+        if (!inEditCooldown && !rpmDirty && document.activeElement !== rpmEl) {
           rpmEl.value = s.speed_rpm;
         }
-        if (!styleDirty && document.activeElement !== styleEl) {
+        if (!inEditCooldown && !styleDirty && document.activeElement !== styleEl) {
           styleEl.value = s.style;
         }
         const remoteEnabled = Boolean(s.remote_json_enabled);
@@ -266,17 +268,25 @@
     function applySpeed() {
       const rpm = parseInt(document.getElementById('rpm').value || '60', 10);
       rpmDirty = false;
+      userEditingUntil = Date.now() + 3000;
       post({ command: 'set_speed', rpm });
     }
 
     function applyStyle() {
       const style = document.getElementById('style').value;
       styleDirty = false;
+      userEditingUntil = Date.now() + 3000;
       post({ command: 'set_style', style });
     }
 
-    document.getElementById('rpm').addEventListener('input', () => { rpmDirty = true; });
-    document.getElementById('style').addEventListener('change', () => { styleDirty = true; });
+    document.getElementById('rpm').addEventListener('input', () => {
+      rpmDirty = true;
+      userEditingUntil = Date.now() + 5000;
+    });
+    document.getElementById('style').addEventListener('change', () => {
+      styleDirty = true;
+      userEditingUntil = Date.now() + 5000;
+    });
 
     document.getElementById('remoteSwitch').addEventListener('change', (e) => {
       setRemoteMode(e.target.checked);
