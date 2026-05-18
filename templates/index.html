@@ -196,7 +196,8 @@
           document.getElementById('moving').textContent = 'unavailable';
           appendLog('Stepper unavailable on this host: ' + (s.error || 'unknown error'));
         } else {
-          document.getElementById('moving').textContent = s.moving ? 'moving' : 'idle';
+          const backend = s.backend || 'local';
+          document.getElementById('moving').textContent = (s.moving ? 'moving' : 'idle') + ' (' + backend + ')';
         }
         document.getElementById('rpm').value = s.speed_rpm;
         document.getElementById('style').value = s.style;

@@ -2,6 +2,8 @@ import json
 import os
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -12,6 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent
 COMMAND_FILE = BASE_DIR / "command.json"
 RADAR_DASHBOARD_URL = os.getenv("RADAR_DASHBOARD_URL", "http://127.0.0.1:5060")
 OPTA_DASHBOARD_URL = os.getenv("OPTA_DASHBOARD_URL", "http://127.0.0.1:5070")
+STEPPER_REMOTE_URL = os.getenv("STEPPER_REMOTE_URL", "").strip().rstrip("/")
 
 app = Flask(__name__)
 controller = None
@@ -28,6 +31,37 @@ def get_controller():
         return controller, None
     if controller_error is not None:
         return None, controller_error
+
+
+def has_remote_stepper():
+    return bool(STEPPER_REMOTE_URL)
+
+
+def remote_stepper_request(path, payload=None):
+    if not has_remote_stepper():
+        return None, 503, "Remote stepper URL not configured"
+
+    url = f"{STEPPER_REMOTE_URL}{path}"
+    body = None
+    headers = {}
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(url=url, data=body, headers=headers, method="POST" if body else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = resp.read().decode("utf-8")
+            return json.loads(data), resp.status, None
+    except urllib.error.HTTPError as exc:
+        try:
+            data = exc.read().decode("utf-8")
+            parsed = json.loads(data)
+        except Exception:
+            parsed = {"ok": False, "error": data if "data" in locals() else str(exc)}
+        return parsed, exc.code, None
+    except Exception as exc:
+        return None, 503, str(exc)
 
     try:
         controller = StepperController()
@@ -51,6 +85,12 @@ def execute_command(payload, source="ui"):
                     "ok": False,
                     "error": "Remote JSON control is disabled in dashboard switch",
                 }, 403
+
+    if has_remote_stepper():
+        result, code, err = remote_stepper_request("/api/command", payload)
+        if err:
+            return {"ok": False, "error": f"Remote stepper request failed: {err}"}, 503
+        return result, code
 
     with controller_lock:
         ctrl, ctrl_error = get_controller()
@@ -137,6 +177,29 @@ def opta_dashboard():
 def api_status():
     with mode_lock:
         remote_enabled = remote_json_enabled
+
+    if has_remote_stepper():
+        result, code, err = remote_stepper_request("/api/status")
+        if err:
+            status = {
+                "available": False,
+                "error": f"Remote stepper request failed: {err}",
+                "position": 0,
+                "limit_switch_1": False,
+                "limit_switch_2": False,
+                "moving": False,
+                "speed_rpm": 0,
+                "style": "INTERLEAVE",
+                "backend": "remote",
+            }
+            status["remote_json_enabled"] = remote_enabled
+            return jsonify(status)
+
+        if isinstance(result, dict):
+            result["backend"] = "remote"
+            result["remote_json_enabled"] = remote_enabled
+            return jsonify(result), code
+
     with controller_lock:
         ctrl, ctrl_error = get_controller()
         if ctrl is None:
@@ -149,10 +212,12 @@ def api_status():
                 "moving": False,
                 "speed_rpm": 0,
                 "style": "INTERLEAVE",
+                "backend": "local",
             }
         else:
             status = ctrl.get_status()
             status["available"] = True
+            status["backend"] = "local"
     status["remote_json_enabled"] = remote_enabled
     return jsonify(status)
 

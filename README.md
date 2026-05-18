@@ -86,6 +86,14 @@ export RADAR_DASHBOARD_URL="http://127.0.0.1:5060"
 export OPTA_DASHBOARD_URL="http://127.0.0.1:5070"
 ```
 
+To control a stepper connected to a different machine (for example RPi from Ubuntu hub), set:
+
+```bash
+export STEPPER_REMOTE_URL="http://<rpi-ip>:5055/stepper"
+```
+
+Then all `/stepper` commands on the current server are forwarded to that remote RPi API.
+
 ### 7. (Optional) Run on Boot
 
 See [Setup as Systemd Service](#setup-as-systemd-service) below.
@@ -132,6 +140,31 @@ Hub page (all dashboards):
 
 ```text
 http://localhost:5055/
+```
+
+### Run Ubuntu Hub + RPi Stepper Backend
+
+RPi machine (with Motor HAT connected):
+
+```bash
+cd ~/RPIStepper
+source venv/bin/activate
+python3 dashboard_server.py
+```
+
+Ubuntu machine (main dashboard UI):
+
+```bash
+cd ~/Documents/RPIStepper
+source venv/bin/activate
+export STEPPER_REMOTE_URL="http://<rpi-ip>:5055/stepper"
+python3 dashboard_server.py
+```
+
+Open on Ubuntu:
+
+```text
+http://<ubuntu-ip>:5055/stepper
 ```
 
 ### JSON File Control
