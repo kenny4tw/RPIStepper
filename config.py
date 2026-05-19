@@ -9,11 +9,11 @@ LIMIT_SWITCH_2_PIN = 24    # GPIO24 - End limit switch (right/top)
 # Stepper Motor Parameters
 MOTOR_PORT = 1             # 1 = M1+M2, 2 = M3+M4
 MOTOR_STEPS_PER_REV = 200  # Standard NEMA 17: 1.8° per step = 200 steps/rev
-MOTOR_STYLE = 'INTERLEAVE' # 'SINGLE', 'DOUBLE', 'INTERLEAVE', or 'MICROSTEP'
-MOTOR_SPEED_RPM = 60       # Target speed in RPM
+MOTOR_STYLE = 'DOUBLE'     # 'SINGLE', 'DOUBLE', 'INTERLEAVE', or 'MICROSTEP'
+MOTOR_SPEED_RPM = 30       # Target speed in RPM (reduced for reliability)
 
 # Motion smoothing
-ACCEL_RAMP_ENABLED = True   # Apply linear acceleration/deceleration ramp
+ACCEL_RAMP_ENABLED = False  # Apply linear acceleration/deceleration ramp
 ACCEL_RAMP_STEPS = 40       # Ramp length in full motor steps (not microsteps)
 ACCEL_START_FACTOR = 2.5    # Start/end delay multiplier vs cruise speed
 

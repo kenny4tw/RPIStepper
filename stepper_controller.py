@@ -83,9 +83,10 @@ class StepperController:
             speed_rpm = self.speed_rpm
         steps_per_second = (MOTOR_STEPS_PER_REV * speed_rpm / 60.0) * factor
         if steps_per_second <= 0:
-            return 0.005
+            return 0.010
         # Clamp to avoid unrealistically small delays on slower boards.
-        return max(0.0005, 1.0 / steps_per_second)
+        # Add 5ms minimum buffer for I2C communication overhead.
+        return max(0.010, 1.0 / steps_per_second)
 
     def _ramped_delay_seconds(self, index, total_steps):
         base_delay = self._step_delay_seconds()
