@@ -235,10 +235,11 @@
       const data = await res.json();
       if (!res.ok || !data.ok) {
         appendLog('Error: ' + (data.error || 'unknown'));
-        return;
+        return null;
       }
       appendLog('Executed: ' + payload.command);
       fetchStatus();
+      return data;
     }
 
     async function setRemoteMode(enabled) {
@@ -256,13 +257,30 @@
       appendLog('Remote JSON control ' + (data.remote_json_enabled ? 'enabled' : 'disabled'));
     }
 
-    function sendCommand(command) {
+    async function sendCommand(command) {
       const steps = parseInt(document.getElementById('steps').value || '200', 10);
       if (command === 'move_forward' || command === 'move_backward') {
-        post({ command, steps });
+        const rpm = parseInt(document.getElementById('rpm').value || '60', 10);
+        const style = document.getElementById('style').value;
+
+        rpmDirty = false;
+        styleDirty = false;
+        userEditingUntil = Date.now() + 3000;
+
+        const speedOk = await post({ command: 'set_speed', rpm });
+        if (!speedOk) {
+          return;
+        }
+
+        const styleOk = await post({ command: 'set_style', style });
+        if (!styleOk) {
+          return;
+        }
+
+        await post({ command, steps });
         return;
       }
-      post({ command });
+      await post({ command });
     }
 
     function applySpeed() {
