@@ -162,8 +162,14 @@
           <option selected>INTERLEAVE</option>
           <option>MICROSTEP</option>
         </select>
+        <select id="profile">
+          <option>safe</option>
+          <option selected>balanced</option>
+          <option>aggressive</option>
+        </select>
         <button onclick="applySpeed()">Set Speed</button>
         <button onclick="applyStyle()">Set Style</button>
+        <button onclick="applyProfile()">Set Profile</button>
       </div>
 
       <div class="row" style="align-items:center; margin-top: 14px;">
@@ -182,6 +188,7 @@
     let lastAvailable = true;
     let rpmDirty = false;
     let styleDirty = false;
+    let profileDirty = false;
     let userEditingUntil = 0;
 
     function appendLog(text) {
@@ -212,11 +219,15 @@
         const inEditCooldown = Date.now() < userEditingUntil;
         const rpmEl = document.getElementById('rpm');
         const styleEl = document.getElementById('style');
+        const profileEl = document.getElementById('profile');
         if (!inEditCooldown && !rpmDirty && document.activeElement !== rpmEl) {
           rpmEl.value = s.speed_rpm;
         }
         if (!inEditCooldown && !styleDirty && document.activeElement !== styleEl) {
           styleEl.value = s.style;
+        }
+        if (!inEditCooldown && !profileDirty && document.activeElement !== profileEl && s.performance_profile) {
+          profileEl.value = s.performance_profile;
         }
         const remoteEnabled = Boolean(s.remote_json_enabled);
         document.getElementById('remoteSwitch').checked = remoteEnabled;
@@ -260,23 +271,8 @@
     async function sendCommand(command) {
       const steps = parseInt(document.getElementById('steps').value || '200', 10);
       if (command === 'move_forward' || command === 'move_backward') {
-        const rpm = parseInt(document.getElementById('rpm').value || '60', 10);
-        const style = document.getElementById('style').value;
-
-        rpmDirty = false;
-        styleDirty = false;
-        userEditingUntil = Date.now() + 3000;
-
-        const speedOk = await post({ command: 'set_speed', rpm });
-        if (!speedOk) {
-          return;
-        }
-
-        const styleOk = await post({ command: 'set_style', style });
-        if (!styleOk) {
-          return;
-        }
-
+        // Keep movement path lean: send only the move command.
+        // Speed/style/profile should be applied explicitly with Set buttons.
         await post({ command, steps });
         return;
       }
@@ -297,12 +293,23 @@
       post({ command: 'set_style', style });
     }
 
+    function applyProfile() {
+      const profile = document.getElementById('profile').value;
+      profileDirty = false;
+      userEditingUntil = Date.now() + 3000;
+      post({ command: 'set_performance_profile', profile });
+    }
+
     document.getElementById('rpm').addEventListener('input', () => {
       rpmDirty = true;
       userEditingUntil = Date.now() + 5000;
     });
     document.getElementById('style').addEventListener('change', () => {
       styleDirty = true;
+      userEditingUntil = Date.now() + 5000;
+    });
+    document.getElementById('profile').addEventListener('change', () => {
+      profileDirty = true;
       userEditingUntil = Date.now() + 5000;
     });
 
