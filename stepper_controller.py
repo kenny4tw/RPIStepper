@@ -96,11 +96,11 @@ class StepperController:
         self.performance_profile = "balanced"
         self._profile_settings = self._build_profile_settings()
         self._state_lock = threading.Lock()
+        self._jitter_enabled = os.getenv("STEPPER_JITTER_DIAGNOSTICS", "1").strip().lower() not in {"0", "false", "off", "no"}
+        self._jitter_sample_every_steps = max(1, int(os.getenv("STEPPER_JITTER_SAMPLE_EVERY_STEPS", "8")))
         self._jitter_warn_threshold_ms = max(0.5, float(os.getenv("STEPPER_JITTER_WARN_MS", "6.0")))
         self._jitter_warn_interval_sec = max(0.2, float(os.getenv("STEPPER_JITTER_WARN_INTERVAL_SEC", "2.0")))
         self._jitter_stats = self._new_jitter_stats()
-        self._last_jitter_warning_at = 0.0
-        self._active_motion_diag = None
         self._last_motion_diag = None
         self.set_performance_profile(PERFORMANCE_PROFILE_DEFAULT)
         self._setup_legacy_backend()
@@ -117,77 +117,82 @@ class StepperController:
         }
 
     def _start_motion_diagnostics(self, move_name, total_steps):
-        with self._state_lock:
-            self._active_motion_diag = {
-                "move": str(move_name),
-                "expected_steps": int(total_steps),
-                "start_monotonic": time.monotonic(),
-                "samples": 0,
-                "late_samples": 0,
-                "late_sum_ms": 0.0,
-                "max_late_ms": 0.0,
-                "warn_count": 0,
-            }
+        return {
+            "enabled": bool(self._jitter_enabled),
+            "sample_every_steps": int(self._jitter_sample_every_steps),
+            "move": str(move_name),
+            "expected_steps": int(total_steps),
+            "start_monotonic": time.monotonic(),
+            "samples": 0,
+            "late_samples": 0,
+            "late_sum_ms": 0.0,
+            "max_late_ms": 0.0,
+            "warn_count": 0,
+            "last_warning_at": 0.0,
+        }
 
-    def _record_scheduler_jitter(self, scheduled_time, step_index, total_steps):
+    def _record_scheduler_jitter(self, motion_diag, scheduled_time, step_index, total_steps):
+        if not motion_diag or not motion_diag.get("enabled", False):
+            return
+
+        sample_every = int(motion_diag.get("sample_every_steps", 1))
+        if step_index % sample_every != 0 and step_index != (total_steps - 1):
+            return
+
         now = time.monotonic()
         lateness_ms = max(0.0, (now - scheduled_time) * 1000.0)
-        with self._state_lock:
-            self._jitter_stats["samples"] += 1
-            if self._active_motion_diag is not None:
-                self._active_motion_diag["samples"] += 1
+        motion_diag["samples"] += 1
 
-            if lateness_ms <= 0.0:
-                return
+        if lateness_ms <= 0.0:
+            return
 
-            self._jitter_stats["late_samples"] += 1
-            self._jitter_stats["late_sum_ms"] += lateness_ms
-            self._jitter_stats["max_late_ms"] = max(self._jitter_stats["max_late_ms"], lateness_ms)
+        motion_diag["late_samples"] += 1
+        motion_diag["late_sum_ms"] += lateness_ms
+        motion_diag["max_late_ms"] = max(motion_diag["max_late_ms"], lateness_ms)
 
-            if self._active_motion_diag is not None:
-                self._active_motion_diag["late_samples"] += 1
-                self._active_motion_diag["late_sum_ms"] += lateness_ms
-                self._active_motion_diag["max_late_ms"] = max(self._active_motion_diag["max_late_ms"], lateness_ms)
+        should_warn = lateness_ms >= self._jitter_warn_threshold_ms and (now - motion_diag["last_warning_at"]) >= self._jitter_warn_interval_sec
+        if not should_warn:
+            return
 
-            should_warn = lateness_ms >= self._jitter_warn_threshold_ms and (now - self._last_jitter_warning_at) >= self._jitter_warn_interval_sec
-            if not should_warn:
-                return
-
-            self._last_jitter_warning_at = now
-            self._jitter_stats["warn_count"] += 1
-            if self._active_motion_diag is not None:
-                self._active_motion_diag["warn_count"] += 1
+        motion_diag["last_warning_at"] = now
+        motion_diag["warn_count"] += 1
 
         print(
             f"[JITTER] Scheduler late by {lateness_ms:.2f} ms at step {step_index + 1}/{total_steps}; "
             "Raspberry Pi may be CPU/IO busy"
         )
 
-    def _finish_motion_diagnostics(self, completed_steps, reason):
+    def _finish_motion_diagnostics(self, motion_diag, completed_steps, reason):
+        if not motion_diag:
+            return
+
         now = time.monotonic()
+        late_samples = int(motion_diag.get("late_samples", 0))
+        avg_late_ms = (motion_diag.get("late_sum_ms", 0.0) / late_samples) if late_samples > 0 else 0.0
+        duration_sec = max(0.0, now - float(motion_diag.get("start_monotonic", now)))
+        summary = {
+            "move": motion_diag.get("move", "unknown"),
+            "reason": str(reason),
+            "expected_steps": int(motion_diag.get("expected_steps", 0)),
+            "completed_steps": int(completed_steps),
+            "duration_sec": round(duration_sec, 3),
+            "late_samples": late_samples,
+            "avg_late_ms": round(avg_late_ms, 3),
+            "max_late_ms": round(float(motion_diag.get("max_late_ms", 0.0)), 3),
+            "warn_count": int(motion_diag.get("warn_count", 0)),
+            "timestamp": int(time.time()),
+        }
+
         with self._state_lock:
-            if self._active_motion_diag is None:
-                return
-
-            active = self._active_motion_diag
-            self._active_motion_diag = None
+            self._jitter_stats["samples"] += int(motion_diag.get("samples", 0))
+            self._jitter_stats["late_samples"] += late_samples
+            self._jitter_stats["late_sum_ms"] += float(motion_diag.get("late_sum_ms", 0.0))
+            self._jitter_stats["max_late_ms"] = max(
+                float(self._jitter_stats.get("max_late_ms", 0.0)),
+                float(motion_diag.get("max_late_ms", 0.0)),
+            )
+            self._jitter_stats["warn_count"] += int(motion_diag.get("warn_count", 0))
             self._jitter_stats["total_moves"] += 1
-
-            late_samples = int(active["late_samples"])
-            avg_late_ms = (active["late_sum_ms"] / late_samples) if late_samples > 0 else 0.0
-            duration_sec = max(0.0, now - float(active["start_monotonic"]))
-            summary = {
-                "move": active["move"],
-                "reason": str(reason),
-                "expected_steps": int(active["expected_steps"]),
-                "completed_steps": int(completed_steps),
-                "duration_sec": round(duration_sec, 3),
-                "late_samples": late_samples,
-                "avg_late_ms": round(avg_late_ms, 3),
-                "max_late_ms": round(float(active["max_late_ms"]), 3),
-                "warn_count": int(active["warn_count"]),
-                "timestamp": int(time.time()),
-            }
             self._last_motion_diag = summary
 
         print(
@@ -497,7 +502,7 @@ class StepperController:
         self.is_moving = True
         completed_steps = 0
         reason = "completed"
-        self._start_motion_diagnostics("move_forward", total_steps)
+        motion_diag = self._start_motion_diagnostics("move_forward", total_steps)
         try:
             next_step_time = time.monotonic()
             for i in range(total_steps):
@@ -510,7 +515,7 @@ class StepperController:
                         print("[LIMIT] Limit switch 2 triggered - stopping motor")
                         reason = "limit_switch_2"
                         break
-                self._record_scheduler_jitter(next_step_time, i, total_steps)
+                self._record_scheduler_jitter(motion_diag, next_step_time, i, total_steps)
                 step_delay = self._ramped_delay_from_profile(i, total_steps, base_delay, ramp_steps, start_factor)
                 self.motor.onestep(direction=stepper.FORWARD, style=style)
                 self.current_position += delta_per_driver_step
@@ -518,7 +523,7 @@ class StepperController:
                 next_step_time += step_delay
                 self._wait_until(next_step_time)
         finally:
-            self._finish_motion_diagnostics(completed_steps=completed_steps, reason=reason)
+            self._finish_motion_diagnostics(motion_diag=motion_diag, completed_steps=completed_steps, reason=reason)
             self._finalize_motion(keep_holding=True)
         return True
 
@@ -551,7 +556,7 @@ class StepperController:
         self.is_moving = True
         completed_steps = 0
         reason = "completed"
-        self._start_motion_diagnostics("move_backward", total_steps)
+        motion_diag = self._start_motion_diagnostics("move_backward", total_steps)
         try:
             next_step_time = time.monotonic()
             for i in range(total_steps):
@@ -564,7 +569,7 @@ class StepperController:
                         print("[LIMIT] Limit switch 1 triggered - stopping motor")
                         reason = "limit_switch_1"
                         break
-                self._record_scheduler_jitter(next_step_time, i, total_steps)
+                self._record_scheduler_jitter(motion_diag, next_step_time, i, total_steps)
                 step_delay = self._ramped_delay_from_profile(i, total_steps, base_delay, ramp_steps, start_factor)
                 self.motor.onestep(direction=stepper.BACKWARD, style=style)
                 self.current_position -= delta_per_driver_step
@@ -572,7 +577,7 @@ class StepperController:
                 next_step_time += step_delay
                 self._wait_until(next_step_time)
         finally:
-            self._finish_motion_diagnostics(completed_steps=completed_steps, reason=reason)
+            self._finish_motion_diagnostics(motion_diag=motion_diag, completed_steps=completed_steps, reason=reason)
             self._finalize_motion(keep_holding=True)
         return True
 
@@ -598,7 +603,7 @@ class StepperController:
         steps = 0
         self.is_moving = True
         reason = "max_steps_reached"
-        self._start_motion_diagnostics("home", total_steps)
+        motion_diag = self._start_motion_diagnostics("home", total_steps)
         try:
             next_step_time = time.monotonic()
             while steps < total_steps:
@@ -612,7 +617,7 @@ class StepperController:
                         self.current_position = 0
                         reason = "home_reached"
                         return True
-                self._record_scheduler_jitter(next_step_time, steps, total_steps)
+                self._record_scheduler_jitter(motion_diag, next_step_time, steps, total_steps)
                 step_delay = self._ramped_delay_from_profile(steps, total_steps, base_delay, ramp_steps, start_factor)
                 self.motor.onestep(direction=stepper.BACKWARD, style=style)
                 self.current_position -= 1.0 / style_factor
@@ -620,7 +625,7 @@ class StepperController:
                 self._wait_until(next_step_time)
                 steps += 1
         finally:
-            self._finish_motion_diagnostics(completed_steps=steps, reason=reason)
+            self._finish_motion_diagnostics(motion_diag=motion_diag, completed_steps=steps, reason=reason)
             self._finalize_motion(keep_holding=False)
         print("[HOME] Home position search failed - limit not found")
         return False
