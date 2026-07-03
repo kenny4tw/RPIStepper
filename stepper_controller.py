@@ -100,6 +100,7 @@ class StepperController:
         self._jitter_sample_every_steps = max(1, int(os.getenv("STEPPER_JITTER_SAMPLE_EVERY_STEPS", "8")))
         self._jitter_warn_threshold_ms = max(0.5, float(os.getenv("STEPPER_JITTER_WARN_MS", "6.0")))
         self._jitter_warn_interval_sec = max(0.2, float(os.getenv("STEPPER_JITTER_WARN_INTERVAL_SEC", "2.0")))
+        self._max_scheduler_catchup_sec = max(0.001, float(os.getenv("STEPPER_MAX_CATCHUP_SEC", "0.02")))
         self._jitter_stats = self._new_jitter_stats()
         self._last_motion_diag = None
         self.set_performance_profile(PERFORMANCE_PROFILE_DEFAULT)
@@ -461,6 +462,12 @@ class StepperController:
                 return
             time.sleep(min(remaining, 0.002))
 
+    def _resync_step_clock(self, next_step_time):
+        now = time.monotonic()
+        if (now - next_step_time) > self._max_scheduler_catchup_sec:
+            return now
+        return next_step_time
+
     def _setup_limit_switches(self):
         if ENABLE_LIMIT_SWITCHES:
             self.limit1 = digitalio.DigitalInOut(getattr(board, f"D{LIMIT_SWITCH_1_PIN}"))
@@ -506,6 +513,7 @@ class StepperController:
         try:
             next_step_time = time.monotonic()
             for i in range(total_steps):
+                next_step_time = self._resync_step_clock(next_step_time)
                 if self._safety_check_due(i, check_interval):
                     if self.stop_requested:
                         print("[MOVE] Stop requested")
@@ -560,6 +568,7 @@ class StepperController:
         try:
             next_step_time = time.monotonic()
             for i in range(total_steps):
+                next_step_time = self._resync_step_clock(next_step_time)
                 if self._safety_check_due(i, check_interval):
                     if self.stop_requested:
                         print("[MOVE] Stop requested")
@@ -607,6 +616,7 @@ class StepperController:
         try:
             next_step_time = time.monotonic()
             while steps < total_steps:
+                next_step_time = self._resync_step_clock(next_step_time)
                 if self._safety_check_due(steps, check_interval):
                     if self.stop_requested:
                         print("[HOME] Stop requested")
