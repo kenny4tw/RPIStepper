@@ -16,6 +16,17 @@ RADAR_DASHBOARD_URL = os.getenv("RADAR_DASHBOARD_URL", "http://127.0.0.1:5060")
 OPTA_DASHBOARD_URL = os.getenv("OPTA_DASHBOARD_URL", "http://127.0.0.1:5070")
 STEPPER_REMOTE_URL = os.getenv("STEPPER_REMOTE_URL", "").strip().rstrip("/")
 
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+API_ONLY_MODE = _env_bool("API_ONLY_MODE", default=True)
+COMMAND_FILE_WATCH_ENABLED = _env_bool("COMMAND_FILE_WATCH_ENABLED", default=False)
+
 app = Flask(__name__)
 controller = None
 controller_error = None
@@ -132,6 +143,9 @@ def execute_command(payload, source="ui"):
             elif command == "set_style":
                 style = str(payload.get("style", "INTERLEAVE"))
                 ctrl.set_style(style)
+            elif command == "set_performance_profile":
+                profile = str(payload.get("profile", "balanced"))
+                ctrl.set_performance_profile(profile)
             else:
                 return {"ok": False, "error": f"Unknown command: {command}"}, 400
         except Exception as exc:
@@ -166,24 +180,32 @@ def watch_command_file():
         time.sleep(0.5)
 
 
-@app.route("/")
-def hub():
-    return render_template("hub.html")
+if API_ONLY_MODE:
+    @app.route("/")
+    @app.route("/stepper")
+    @app.route("/radarsensor")
+    @app.route("/opta")
+    def ui_disabled():
+        return jsonify({"ok": False, "error": "UI disabled in API_ONLY_MODE"}), 404
+else:
+    @app.route("/")
+    def hub():
+        return render_template("hub.html")
 
 
-@app.route("/stepper")
-def index():
-    return render_template("index.html")
+    @app.route("/stepper")
+    def index():
+        return render_template("index.html")
 
 
-@app.route("/radarsensor")
-def radarsensor_dashboard():
-    return render_template("embed.html", title="RadarSensor Dashboard", upstream_url=RADAR_DASHBOARD_URL)
+    @app.route("/radarsensor")
+    def radarsensor_dashboard():
+        return render_template("embed.html", title="RadarSensor Dashboard", upstream_url=RADAR_DASHBOARD_URL)
 
 
-@app.route("/opta")
-def opta_dashboard():
-    return render_template("embed.html", title="Arduino Opta Dashboard", upstream_url=OPTA_DASHBOARD_URL)
+    @app.route("/opta")
+    def opta_dashboard():
+        return render_template("embed.html", title="Arduino Opta Dashboard", upstream_url=OPTA_DASHBOARD_URL)
 
 
 @app.route("/api/status", methods=["GET"])
@@ -291,7 +313,15 @@ def ensure_default_command_file():
 
 
 if __name__ == "__main__":
-    ensure_default_command_file()
-    watcher = threading.Thread(target=watch_command_file, daemon=True)
-    watcher.start()
+    if COMMAND_FILE_WATCH_ENABLED:
+        ensure_default_command_file()
+        watcher = threading.Thread(target=watch_command_file, daemon=True)
+        watcher.start()
+        print("[JSON] Command-file watcher enabled")
+    else:
+        print("[JSON] Command-file watcher disabled (recommended for low-jitter API mode)")
+    if API_ONLY_MODE:
+        print("[MODE] API_ONLY_MODE enabled (UI routes disabled)")
+    else:
+        print("[MODE] API_ONLY_MODE disabled (UI routes enabled)")
     app.run(host="0.0.0.0", port=5055, debug=False, threaded=True)
